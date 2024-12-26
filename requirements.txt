@@ -1,3 +1,4 @@
+chromedriver-autoinstaller
 gunicorn
 Flask==2.3.2
 Flask-Cors==5.0.0
