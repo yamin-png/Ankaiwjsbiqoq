@@ -1,64 +1,128 @@
-import requests
-from flask import Flask, render_template_string, request
+from flask import Flask, render_template_string, request, jsonify
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.keys import Keys
+from selenium.webdriver.chrome.service import Service
+from webdriver_manager.chrome import ChromeDriverManager
+import time
+import logging
 
 app = Flask(__name__)
+
+# Set up logging
+logging.basicConfig(level=logging.INFO)
 
 @app.route("/", methods=["GET", "POST"])
 def index():
     if request.method == "POST":
+        # Get email and password pairs from the form input
         email_password_pairs = request.form.get("email_password_pairs")
 
-        # Split the email-password pairs into individual lines
-        email_password_lines = email_password_pairs.strip().split("\n")
+        # Log the received data to verify it's being sent correctly
+        logging.info(f"Received email_password_pairs: {email_password_pairs}")
 
+        # Split the email-password pairs into individual lines
+        if not email_password_pairs:
+            return jsonify({"error": "Email and Password pairs are required!"}), 400
+        
+        email_password_lines = email_password_pairs.strip().split("\n")
+        
+        # Initialize an empty list to store cookies from each email/password pair
         cookies_list = []
         for line in email_password_lines:
-            if not line.strip():
+            if not line.strip():  # Skip empty lines
                 continue
 
+            # Split the line into email and password (assuming a space separates them)
             parts = line.split()
             if len(parts) != 2:
                 cookies_list.append({"error": "Invalid format, each line should contain email and password separated by a space."})
                 continue
 
             email, password = parts
+
+            # Process login and get cookies
             cookies = process_login(email, password)
             cookies_list.append(cookies)
-
+        
+        # Return the cookies for all the email-password pairs
         return render_template_string(HTML_TEMPLATE, cookies_list=cookies_list)
 
     return render_template_string(HTML_TEMPLATE, cookies_list=None)
 
+def process_login(email, password):
+    # Set up headless Chrome options for Selenium
+    chrome_options = Options()
+    chrome_options.add_argument("--headless")  # Run without opening a browser window
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+    
+    # Create a Service object for ChromeDriver using webdriver-manager
+    service = Service(ChromeDriverManager().install())
 
-    def process_login(email, password):
-    session = requests.Session()
-    
-    login_url = "https://www.facebook.com/login"  # Update with correct login URL
-    login_data = {
-        "email": email,
-        "pass": password
-    }
-    
-    response = session.post(login_url, data=login_data)
-    
-    # Check the response status and print content for debugging
-    if response.status_code == 200:
-        print("Login successful!")
-        cookies = session.cookies.get_dict()
-        cookie_header = "; ".join([f"{key}={value}" for key, value in cookies.items()])
+    try:
+        # Initialize the WebDriver (uses the ChromeDriver from webdriver-manager)
+        driver = webdriver.Chrome(service=service, options=chrome_options)
+
+        # Open Facebook login page
+        driver.get("https://www.facebook.com")
+        logging.info("Opening Facebook login page")
+
+        # Wait for the page to load
+        time.sleep(2)
+
+        # Find email and password fields and log in
+        email_field = driver.find_element("id", "email")
+        password_field = driver.find_element("id", "pass")
+        email_field.send_keys(email)
+        password_field.send_keys(password)
+        password_field.send_keys(Keys.RETURN)
+        logging.info(f"Logging in with email: {email}")
+
+        # Wait for login to complete
+        time.sleep(5)
+
+        # Extract cookies after login
+        cookies = driver.get_cookies()
+
+        if not cookies:
+            logging.error(f"No cookies found for {email}. Login might have failed.")
+            return {"error": f"Login failed for {email}, no cookies found!"}
+
+        # Extract the cookies we are interested in and format them
+        cookie_dict = {cookie['name']: cookie['value'] for cookie in cookies}
+        cookie_header = (
+            f"datr={cookie_dict.get('datr', '')}; "
+            f"sb={cookie_dict.get('sb', '')}; "
+            f"m_pixel_ratio={cookie_dict.get('m_pixel_ratio', '')}; "
+            f"wd={cookie_dict.get('wd', '')}; "
+            f"c_user={cookie_dict.get('c_user', '')}; "
+            f"fr={cookie_dict.get('fr', '')}; "
+            f"xs={cookie_dict.get('xs', '')}; "
+            f"locale={cookie_dict.get('locale', '')}; "
+            f"wl_cbv={cookie_dict.get('wl_cbv', '')}; "
+            f"fbl_st={cookie_dict.get('fbl_st', '')}; "
+            f"vpd={cookie_dict.get('vpd', '')}"
+        )
+
+        # Close the browser
+        driver.quit()
+        logging.info(f"Login successful for {email}, cookies extracted")
+
         return {"email": email, "cookies": cookie_header}
-    else:
-        print(f"Failed login for {email}, Status Code: {response.status_code}")
-        print("Response content:", response.text)  # Print the response content to debug the issue
-        return {"error": f"Login failed for {email}"}
-# HTML Template
+
+    except Exception as e:
+        logging.error(f"An error occurred for {email}: {str(e)}")
+        return {"error": f"An unexpected error occurred for {email}: {str(e)}"}
+
+# HTML, CSS, and JS embedded as a Python string (for easy deployment)
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login Form</title>
+    <title>Facebook Login</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -127,7 +191,7 @@ HTML_TEMPLATE = """
     </style>
 </head>
 <body>
-    <h1>Login Form</h1>
+    <h1>Facebook Login</h1>
     
     <form method="POST">
         <label for="email_password_pairs">Enter Email and Password Pairs (one per line, space-separated):</label>
