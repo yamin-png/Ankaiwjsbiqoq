@@ -1,11 +1,13 @@
+import time
+import logging
+import chromedriver_autoinstaller
 from flask import Flask, render_template_string, request, jsonify
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.keys import Keys
-from selenium.webdriver.chrome.service import Service
-from webdriver_manager.chrome import ChromeDriverManager
-import time
-import logging
+
+# Auto-install chromedriver
+chromedriver_autoinstaller.install()
 
 app = Flask(__name__)
 
@@ -57,12 +59,9 @@ def process_login(email, password):
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
     
-    # Create a Service object for ChromeDriver using webdriver-manager
-    service = Service(ChromeDriverManager().install())
-
     try:
-        # Initialize the WebDriver (uses the ChromeDriver from webdriver-manager)
-        driver = webdriver.Chrome(service=service, options=chrome_options)
+        # Initialize the WebDriver (it will use the chromedriver that was installed automatically)
+        driver = webdriver.Chrome(options=chrome_options)
 
         # Open Facebook login page
         driver.get("https://www.facebook.com")
